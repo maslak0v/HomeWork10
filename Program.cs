@@ -2,6 +2,8 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 class Program
 {
@@ -74,9 +76,48 @@ class Program
             }
         }
     }
+    static bool HasWriteAccess(string filePath)
+    {
+        try
+        {
+            // создаем объект FileInfo для указанного файла
+            FileInfo fileInfo = new FileInfo(filePath);
+
+            // получаем объект FileSecurity для файла
+            FileSecurity fileSecurity = fileInfo.GetAccessControl();
+
+            // получаем текущего пользователя
+            WindowsIdentity identity = WindowsIdentity.GetCurrent();
+            AuthorizationRuleCollection rules = fileSecurity.GetAccessRules(true, true, typeof(NTAccount));
+
+            // проверяем правила доступа
+            foreach (FileSystemAccessRule rule in rules)
+            {
+                if (rule.IdentityReference.Value == identity.Name)
+                {
+                    if ((rule.FileSystemRights & FileSystemRights.Write) == FileSystemRights.Write &&
+                        rule.AccessControlType == AccessControlType.Allow)
+                    {
+                        return true; // право на запись есть
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при проверке прав доступа: {ex.Message}");
+        }
+
+        return false; // Если правило не найдено или нет права на запись
+    }
 
     static void AppendCurrentDateSync(string filePath)
     {
+        if (!HasWriteAccess(filePath))
+        {
+            Console.WriteLine($"Недостаточно прав для записи в файл: {filePath}");
+            return;
+        }
         try
         {
             string currentDate = $"\n{DateTime.Now}";
@@ -91,6 +132,11 @@ class Program
 
     static async Task AppendCurrentDateAsync(string filePath)
     {
+        if (!HasWriteAccess(filePath))
+        {
+            Console.WriteLine($"Недостаточно прав для записи в файл: {filePath}");
+            return;
+        }
         try
         {
             string currentDate = $"\n{DateTime.Now}";
